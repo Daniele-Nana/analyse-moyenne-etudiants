@@ -1,4 +1,4 @@
-# Prédiction de la moyenne générale des étudiants
+# Analyse de la moyenne générale des étudiants
 
 Analyse et prédiction de la moyenne générale (sur 20) à partir d'indicateurs
 de mode de vie et de bien-être, sur un jeu de données de 100 000 étudiants simulés.
