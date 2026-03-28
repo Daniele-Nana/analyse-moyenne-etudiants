@@ -1,0 +1,596 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+
+Daniele Isabelle Nana Fotzeu
+Master 1 Data Science
+Data mining et économie 
+
+Analyse des données pour prédiction de moyenne générale des étudiants 
+
+# 1. Chargement et inspection des données
+
+```{r}
+library(readxl)
+
+donnees <- read_excel("C:/Users/danis/Université/Master/Semestre 2/Data mining et économie/moyennes_etudiants.xlsx")
+
+donnees$Genre <- as.factor(donnees$Genre)
+donnees$Departement <- as.factor(donnees$Departement)
+donnees$Depression_presente <- as.factor(donnees$Depression_presente)
+
+str(donnees)
+```
+
+# 2. Analyse exploratoire des données (EDA)
+
+# 2.1. Statistiques descriptives
+
+```{r}
+summary(donnees)
+
+table(donnees$Genre)
+table(donnees$Departement)
+table(donnees$Depression_presente)
+```
+
+# 2.2. Visualisations
+
+```{r}
+par(mfrow = c(2,4))
+
+hist(donnees$Age, main = "Âge", xlab = "Âge")
+hist(donnees$Sommeil_heures_par_jour, main = "Sommeil (heures/jour)")
+hist(donnees$Etudes_heures_par_jour, main = "Études (heures/jour)")
+hist(donnees$Reseaux_sociaux_heures_par_jour, main = "Réseaux sociaux (heures/jour)")
+hist(donnees$Activite_physique_minutes_par_semaine, main = "Activité physique (min/semaine)")
+hist(donnees$Stress_niveau_sur_10, main = "Stress (niveau/10)")
+hist(donnees$Moyenne_generale_sur_20, main = "Moyenne générale /20")
+```
+
+```{r}
+par(mfrow = c(1,3))
+
+boxplot(Moyenne_generale_sur_20 ~ Genre, data = donnees, 
+        main = "Moyenne selon le Genre", ylab = "Moyenne /20")
+boxplot(Moyenne_generale_sur_20 ~ Departement, data = donnees, 
+        main = "Moyenne selon le Département", ylab = "Moyenne /20", las = 2)
+boxplot(Moyenne_generale_sur_20 ~ Depression_presente, data = donnees,
+        main = "Moyenne selon la dépression", ylab = "Moyenne /20")
+```
+
+# 2.3. Matrice de corrélation
+
+```{r}
+variables_quantitatives <- donnees[, c("Age", "Sommeil_heures_par_jour", "Etudes_heures_par_jour", "Reseaux_sociaux_heures_par_jour", "Activite_physique_minutes_par_semaine", "Stress_niveau_sur_10", "Moyenne_generale_sur_20")]
+
+matrice_correlation <- cor(variables_quantitatives, use = "complete.obs")
+print(matrice_correlation) 
+```
+
+```{r}
+library(corrplot)
+
+corrplot(matrice_correlation, method = "number", type = "upper", tl.cex = 0.8)
+```
+
+# 3. Comparaisons de moyennes par groupes (tests de base)
+
+```{r}
+t.test(Moyenne_generale_sur_20 ~ Genre, data = donnees)
+```
+
+```{r}
+anova_departement <- aov(Moyenne_generale_sur_20 ~ Departement, data = donnees)
+print(anova_departement)
+summary(anova_departement)
+```
+
+```{r}
+t.test(Moyenne_generale_sur_20 ~ Depression_presente, data = donnees)
+```
+
+# 4. Régression linéaire multiple (MCO)
+
+# 4.1. Estimation du modèle complet
+
+```{r}
+modele_mco <- lm(Moyenne_generale_sur_20 ~ Age + Genre + Departement + Sommeil_heures_par_jour + Etudes_heures_par_jour + Reseaux_sociaux_heures_par_jour + Activite_physique_minutes_par_semaine + Stress_niveau_sur_10 + Depression_presente, data = donnees)
+summary(modele_mco)
+```
+
+# 4.2. Tests de validation des hypothèses
+
+# 4.2.1. Normalité des résidus
+
+```{r}
+residus <- residuals(modele_mco)
+
+qqnorm(residus, main = "Q-Q plot des résidus")
+qqline(residus, col = "red")
+```
+
+```{r}
+set.seed(123)
+
+echantillon_residus <- sample(residus, 5000)
+shapiro.test(echantillon_residus)
+```
+
+# 4.2.2. Homoscédasticité
+
+```{r}
+library(lmtest)
+library(car)
+
+plot(modele_mco, which = 1, main = "Résidus vs valeurs ajustées")
+```
+
+```{r}
+bptest(modele_mco)
+```
+
+# 4.2.3. Indépendance des résidus
+
+```{r}
+dwtest(modele_mco)
+```
+
+# 4.2.4. Multicolinéarité (VIF)
+
+```{r}
+vif(modele_mco)
+```
+
+# 5. Sélection de variables
+
+# 5.1. Stepwise basé sur l'AIC
+
+```{r}
+library(MASS)
+
+modele_step <- stepAIC(modele_mco, direction = "both", trace = FALSE)
+summary(modele_step)
+```
+
+# 5.2. Meilleurs sous-ensembles
+
+```{r}
+library(leaps)
+
+set.seed(123)
+donnees_sub <- donnees[sample(nrow(donnees), 10000), ]
+
+modele_sub <- regsubsets(Moyenne_generale_sur_20 ~ Age + Genre + Departement + Sommeil_heures_par_jour + Etudes_heures_par_jour + Reseaux_sociaux_heures_par_jour + Activite_physique_minutes_par_semaine + Stress_niveau_sur_10 + Depression_presente, data = donnees_sub, nvmax = 10)
+print(modele_sub)
+summary(modele_sub)
+```
+
+```{r}
+which.max(summary(modele_sub)$adjr2)
+which.min(summary(modele_sub)$cp)
+which.min(summary(modele_sub)$bic)
+```
+
+```{r}
+par(mfrow = c(1,3))
+
+plot(modele_sub, scale = "adjr2")
+plot(modele_sub, scale = "Cp")
+plot(modele_sub, scale = "bic")
+```
+
+# 6. Préparation des données pour la modélisation
+
+# 6.1. Création des variables indicatrices (dummy)
+
+```{r}
+library(caret)
+
+dummies <- dummyVars(Moyenne_generale_sur_20 ~ Age + Genre + Departement + Sommeil_heures_par_jour + Etudes_heures_par_jour + Reseaux_sociaux_heures_par_jour + Activite_physique_minutes_par_semaine + Stress_niveau_sur_10 + Depression_presente, data = donnees, fullRank = FALSE)
+
+donnees_dummy <- as.data.frame(predict(dummies, newdata = donnees))
+donnees_dummy$Moyenne_generale_sur_20 <- donnees$Moyenne_generale_sur_20
+```
+
+# 6.2. Séparation entraînement / test (80% / 20%) 
+
+```{r}
+set.seed(123)
+
+trainIndex <- createDataPartition(donnees_dummy$Moyenne_generale_sur_20,
+                                   p = 0.8, list = FALSE)
+train <- donnees_dummy[trainIndex, ]
+test  <- donnees_dummy[-trainIndex, ]
+```
+
+# 6.3. Standardisation (centrer‑réduire)
+
+```{r}
+preProc <- preProcess(train[, -ncol(train)], method = c("center", "scale"))
+train_scaled <- predict(preProc, train[, -ncol(train)])
+train_scaled$Moyenne_generale_sur_20 <- train$Moyenne_generale_sur_20
+
+test_scaled <- predict(preProc, test[, -ncol(test)])
+test_scaled$Moyenne_generale_sur_20 <- test$Moyenne_generale_sur_20
+```
+
+# 7. Validation croisée sur données standardisées
+
+# 7.1. MCO
+
+```{r}
+set.seed(123)
+
+train_control <- trainControl(method = "cv", number = 10)
+
+modele_mco_cv <- train(Moyenne_generale_sur_20 ~ ., data = train_scaled,
+                        method = "lm", trControl = train_control)
+print(modele_mco_cv)
+```
+
+# 7.2. Stepwise
+
+```{r}
+modele_step_cv <- train(Moyenne_generale_sur_20 ~ ., data = train_scaled,
+                         method = "lmStepAIC", direction = "both",
+                         trControl = train_control, trace = FALSE)
+print(modele_step_cv)
+```
+
+# 8. Analyse en Composantes Principales (ACP)
+
+# 8.1. Réalisation de l'ACP
+
+```{r}
+acp <- prcomp(train_scaled[, -ncol(train_scaled)], center = FALSE, scale. = FALSE)
+print(acp)
+summary(acp)
+```
+
+```{r}
+library(factoextra)
+
+fviz_eig(acp, addlabels = TRUE, ylim = c(0, 50))
+```
+
+```{r}
+fviz_pca_var(acp, col.var = "contrib")
+```
+
+```{r}
+fviz_pca_ind(acp)
+```
+
+# 8.2. Choix du nombre de composantes 
+
+```{r}
+valeurs_propres <- acp$sdev^2
+sum(valeurs_propres > 1)
+```
+
+```{r}
+var_explique <- valeurs_propres / sum(valeurs_propres)
+ncomp_var_cum <- which(cumsum(var_explique) >= 0.8)[1]
+print(ncomp_var_cum)
+```
+
+```{r}
+plot(cumsum(var_explique), type = "b", xlab = "Nombre de composantes",
+     ylab = "Variance cumulée", main = "Choix du nombre de composantes")
+abline(h = 0.8, col = "red", lty = 2)  # seuil de 80%
+```
+
+# 9. Régression sur composantes principales (PCR)
+
+# 9.1. Estimation du modèle PCR avec validation croisée
+
+```{r}
+library(pls)
+
+set.seed(123)
+
+modele_pcr <- pcr(Moyenne_generale_sur_20 ~ ., data = train_scaled,
+                  validation = "CV", scale = FALSE)
+summary(modele_pcr)
+```
+
+# 9.2. Choix du nombre de composantes
+
+```{r}
+ncomp_pcr <- which.min(RMSEP(modele_pcr)$val[1, 1, ]) - 1
+print(ncomp_pcr)
+```
+
+```{r}
+validationplot(modele_pcr, val.type = "MSEP")
+```
+
+# 9.3. Coefficients et loadings 
+
+```{r}
+coef_pcr <- coef(modele_pcr, ncomp = ncomp_pcr, intercept = TRUE)
+print(coef_pcr)
+```
+
+```{r}
+loadings_pcr <- loadings(modele_pcr)[, 1:ncomp_pcr]
+print(loadings_pcr)
+```
+
+# 9.4. Prédiction et RMSE
+
+```{r}
+pred_pcr <- predict(modele_pcr, newdata = test_scaled, ncomp = ncomp_pcr)
+rmse_pcr <- RMSE(pred_pcr, test_scaled$Moyenne_generale_sur_20)
+print(rmse_pcr)
+```
+
+# 10. Régression PLS (Partial Least Squares)
+
+# 10.1. Estimation du modèle PLS avec validation croisée
+
+```{r}
+set.seed(123)
+
+modele_pls <- plsr(Moyenne_generale_sur_20 ~ ., data = train_scaled,
+                   validation = "CV", scale = FALSE)
+summary(modele_pls)
+```
+
+# 10.2. Choix du nombre de composantes
+
+```{r}
+ncomp_pls <- which.min(RMSEP(modele_pls)$val[1, 1, ]) - 1
+print(ncomp_pls)
+```
+
+```{r}
+validationplot(modele_pls, val.type = "MSEP")
+```
+
+# 10.3. Coefficients et loadings 
+
+```{r}
+coef_pls <- coef(modele_pls, ncomp = ncomp_pls, intercept = TRUE)
+print(coef_pls)
+```
+
+```{r}
+loadings_pls <- loadings(modele_pls)[, 1:ncomp_pls]
+print(loadings_pls)
+```
+
+# 10.4. Prédiction et RMSE
+
+```{r}
+pred_pls <- predict(modele_pls, newdata = test_scaled, ncomp = ncomp_pls)
+rmse_pls <- RMSE(pred_pls, test_scaled$Moyenne_generale_sur_20)
+print(rmse_pls)
+```
+
+# 11. Bootstrap pour estimer la précision des coefficients
+
+# 11.1. MCO
+
+```{r}
+library(boot)
+
+boot_coef_mco <- function(data, indices) {
+  d <- data[indices, ]
+  modele <- lm(Moyenne_generale_sur_20 ~ ., data = d)
+  return(coef(modele))
+}
+
+set.seed(123)
+
+boot_mco <- boot(data = train_scaled, statistic = boot_coef_mco, R = 100)
+print(boot_mco)
+```
+
+```{r}
+coef_noms <- names(coef(lm(Moyenne_generale_sur_20 ~ ., data = train_scaled)))
+
+intervalles_mco <- t(sapply(1:length(boot_mco$t0), function(i) {
+  ci <- tryCatch(boot.ci(boot_mco, type = "perc", index = i), error = function(e) NULL)
+  if (!is.null(ci)) {
+    c(lower = ci$percent[4], upper = ci$percent[5])
+  } else {
+    c(lower = NA, upper = NA)
+  }
+}))
+rownames(intervalles_mco) <- coef_noms
+print(intervalles_mco)
+```
+
+# 11.2. Stepwise
+
+```{r}
+boot_coef_step <- function(data, indices) {
+  d <- data[indices, ]
+  modele_complet <- lm(Moyenne_generale_sur_20 ~ ., data = d)
+  modele_step <- stepAIC(modele_complet, direction = "both", trace = FALSE)
+  coefs <- rep(NA, length(coef_noms))
+  names(coefs) <- coef_noms
+  coefs_step <- coef(modele_step)
+  coefs[names(coefs_step)] <- coefs_step
+  return(coefs)
+}
+
+set.seed(123)
+boot_step <- boot(data = train_scaled, statistic = boot_coef_step, R = 100) 
+print(boot_step)
+```
+
+```{r}
+intervalles_step <- t(sapply(1:length(boot_step$t0), function(i) {
+  ci <- tryCatch(boot.ci(boot_step, type = "perc", index = i), error = function(e) NULL)
+  if (!is.null(ci)) {
+    c(lower = ci$percent[4], upper = ci$percent[5])
+  } else {
+    c(lower = NA, upper = NA)
+  }
+}))
+rownames(intervalles_step) <- coef_noms
+print(intervalles_step)
+```
+
+# 11.3. PCR
+
+```{r}
+boot_coef_pcr <- function(data, indices) {
+  d <- data[indices, ]
+  modele <- pcr(Moyenne_generale_sur_20 ~ ., data = d, ncomp = ncomp_pcr, scale = FALSE)
+  coefs <- coef(modele, ncomp = ncomp_pcr, intercept = TRUE)
+  as.vector(coefs)
+}
+
+set.seed(123)
+boot_pcr <- boot(data = train_scaled, statistic = boot_coef_pcr, R = 100)
+print(boot_pcr)
+```
+
+```{r}
+intervalles_pcr <- t(sapply(1:length(boot_pcr$t0), function(i) {
+  ci <- tryCatch(boot.ci(boot_pcr, type = "perc", index = i), error = function(e) NULL)
+  if (!is.null(ci)) {
+    c(lower = ci$percent[4], upper = ci$percent[5])
+  } else {
+    c(lower = NA, upper = NA)
+  }
+}))
+rownames(intervalles_pcr) <- c("Intercept", coef_noms[-1])
+print(intervalles_pcr)
+```
+
+# 11.3. PLS
+
+```{r}
+boot_coef_pls <- function(data, indices) {
+  d <- data[indices, ]
+  modele <- plsr(Moyenne_generale_sur_20 ~ ., data = d, ncomp = ncomp_pls, scale = FALSE)
+  coefs <- coef(modele, ncomp = ncomp_pls, intercept = TRUE)
+  as.vector(coefs)
+}
+
+set.seed(123)
+boot_pls <- boot(data = train_scaled, statistic = boot_coef_pls, R = 100)
+print(boot_pls)
+```
+
+```{r}
+intervalles_pls <- t(sapply(1:length(boot_pls$t0), function(i) {
+  ci <- tryCatch(boot.ci(boot_pls, type = "perc", index = i), error = function(e) NULL)
+  if (!is.null(ci)) {
+    c(lower = ci$percent[4], upper = ci$percent[5])
+  } else {
+    c(lower = NA, upper = NA)
+  }
+}))
+rownames(intervalles_pls) <- c("Intercept", coef_noms[-1])
+print(intervalles_pls)
+```
+
+# 12. Comparaison des modèles
+
+# 12.1. Tableau des métriques 
+
+```{r}
+library(Metrics)
+
+pred_mco <- predict(modele_mco_cv, newdata = test_scaled)
+rmse_mco <- RMSE(pred_mco, test_scaled$Moyenne_generale_sur_20)
+
+
+pred_step <- predict(modele_step_cv, newdata = test_scaled)
+rmse_step <- RMSE(pred_step, test_scaled$Moyenne_generale_sur_20)
+
+r2 <- function(obs, pred) cor(obs, pred)^2
+
+rmse_val  <- c(rmse_mco, rmse_step, rmse_pcr, rmse_pls)
+r2_val    <- c(r2(test_scaled$Moyenne_generale_sur_20, pred_mco),
+                r2(test_scaled$Moyenne_generale_sur_20, pred_step),
+                r2(test_scaled$Moyenne_generale_sur_20, pred_pcr),
+                r2(test_scaled$Moyenne_generale_sur_20, pred_pls))
+mae_val   <- c(mae(test_scaled$Moyenne_generale_sur_20, pred_mco),
+                mae(test_scaled$Moyenne_generale_sur_20, pred_step),
+                mae(test_scaled$Moyenne_generale_sur_20, pred_pcr),
+                mae(test_scaled$Moyenne_generale_sur_20, pred_pls))
+mape_val  <- c(mean(abs((test_scaled$Moyenne_generale_sur_20 - pred_mco) / test_scaled$Moyenne_generale_sur_20)) * 100,
+                mean(abs((test_scaled$Moyenne_generale_sur_20 - pred_step) / test_scaled$Moyenne_generale_sur_20)) * 100,
+                mean(abs((test_scaled$Moyenne_generale_sur_20 - pred_pcr) / test_scaled$Moyenne_generale_sur_20)) * 100,
+                mean(abs((test_scaled$Moyenne_generale_sur_20 - pred_pls) / test_scaled$Moyenne_generale_sur_20)) * 100)
+parc_val  <- c(length(coef(modele_mco_cv$finalModel)) - 1,
+                length(coef(modele_step_cv$finalModel)) - 1,
+                ncomp_pcr,
+                ncomp_pls)
+moy_res    <- c(mean(test_scaled$Moyenne_generale_sur_20 - pred_mco),
+                mean(test_scaled$Moyenne_generale_sur_20 - pred_step),
+                mean(test_scaled$Moyenne_generale_sur_20 - pred_pcr),
+                mean(test_scaled$Moyenne_generale_sur_20 - pred_pls))
+sd_res     <- c(sd(test_scaled$Moyenne_generale_sur_20 - pred_mco),
+                sd(test_scaled$Moyenne_generale_sur_20 - pred_step),
+                sd(test_scaled$Moyenne_generale_sur_20 - pred_pcr),
+                sd(test_scaled$Moyenne_generale_sur_20 - pred_pls))
+
+metriques_matrice <- cbind(rmse_val, r2_val, mae_val, mape_val, parc_val, moy_res, sd_res)
+rownames(metriques_matrice) <- c("MCO", "Stepwise", "PCR", "PLS")
+colnames(metriques_matrice) <- c("RMSE", "R2", "MAE", "MAPE", "Parcimonie", "Moyenne_residus", "Ecart_type_residus")
+print(metriques_matrice)
+```
+
+# 12.2. Valeurs observées vs prédites
+
+```{r}
+par(mfrow = c(2,2))
+
+plot(test_scaled$Moyenne_generale_sur_20, pred_mco, main = "MCO",
+     xlab = "Observé", ylab = "Prédit", pch = 16, cex = 0.5, col = "blue")
+abline(0,1, col = "red", lwd = 2)
+plot(test_scaled$Moyenne_generale_sur_20, pred_step, main = "Stepwise",
+     xlab = "Observé", ylab = "Prédit", pch = 16, cex = 0.5, col = "blue")
+abline(0,1, col = "red", lwd = 2)
+plot(test_scaled$Moyenne_generale_sur_20, pred_pcr, main = "PCR",
+     xlab = "Observé", ylab = "Prédit", pch = 16, cex = 0.5, col = "blue")
+abline(0,1, col = "red", lwd = 2)
+plot(test_scaled$Moyenne_generale_sur_20, pred_pls, main = "PLS",
+     xlab = "Observé", ylab = "Prédit", pch = 16, cex = 0.5, col = "blue")
+abline(0,1, col = "red", lwd = 2)
+```
+
+# 12.3. Résidus vs valeurs observées
+
+```{r}
+res_mco  <- test_scaled$Moyenne_generale_sur_20 - pred_mco
+res_step <- test_scaled$Moyenne_generale_sur_20 - pred_step
+res_pcr  <- test_scaled$Moyenne_generale_sur_20 - pred_pcr
+res_pls  <- test_scaled$Moyenne_generale_sur_20 - pred_pls
+
+par(mfrow = c(2,2))
+
+plot(test_scaled$Moyenne_generale_sur_20, res_mco, main = "MCO",
+     xlab = "Observé", ylab = "Résidus", pch = 16, cex = 0.5)
+abline(h = 0, col = "red", lwd = 2)
+plot(test_scaled$Moyenne_generale_sur_20, res_step, main = "Stepwise",
+     xlab = "Observé", ylab = "Résidus", pch = 16, cex = 0.5)
+abline(h = 0, col = "red", lwd = 2)
+plot(test_scaled$Moyenne_generale_sur_20, res_pcr, main = "PCR",
+     xlab = "Observé", ylab = "Résidus", pch = 16, cex = 0.5)
+abline(h = 0, col = "red", lwd = 2)
+plot(test_scaled$Moyenne_generale_sur_20, res_pls, main = "PLS",
+     xlab = "Observé", ylab = "Résidus", pch = 16, cex = 0.5)
+abline(h = 0, col = "red", lwd = 2)
+```
+
+# 12.4. Histogrammes des résidus
+
+```{r}
+par(mfrow = c(2,2))
+
+hist(res_mco, main = "MCO", xlab = "Résidus", col = "lightblue", breaks = 50)
+hist(res_step, main = "Stepwise", xlab = "Résidus", col = "lightblue", breaks = 50)
+hist(res_pcr, main = "PCR", xlab = "Résidus", col = "lightblue", breaks = 50)
+hist(res_pls, main = "PLS", xlab = "Résidus", col = "lightblue", breaks = 50)
+```
